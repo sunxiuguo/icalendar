@@ -42,6 +42,7 @@
 
 
 require 'tzinfo'
+require_relative 'transition_rule_sample'
 begin
   require 'tzinfo/data'
 rescue LoadError
@@ -104,8 +105,29 @@ module TZInfo
       elsif period.end_transition.nil?
         timezone.add_component period.dst? ? period.daylight : period.standard
       else
-        timezone.add_component period.daylight
-        timezone.add_component period.standard
+        daylight = period.daylight
+        standard = period.standard
+        # TZInfo 0.3 has no transitions_up_to; retain its existing behavior.
+        if respond_to?(:transitions_up_to)
+          anchors = [period.dst? ? period.start_transition : period.end_transition,
+                     period.dst? ? period.end_transition : period.start_transition]
+          first_year = anchors.map { |anchor| Icalendar::TransitionRuleSample.onset(anchor).year }.min
+          year_count = 28
+          # UTC padding includes every onset in the complete local-year interval.
+          transitions = transitions_up_to(Time.utc(first_year + year_count, 1, 3),
+                                          Time.utc(first_year - 1, 12, 30))
+          transitions = transitions.select do |transition|
+            year = Icalendar::TransitionRuleSample.onset(transition).year
+            year >= first_year && year < first_year + year_count
+          end
+          rules = Icalendar::TransitionRuleSample.rules(transitions, anchors, first_year, year_count)
+          if rules
+            daylight.rrule = rules[0]
+            standard.rrule = rules[1]
+          end
+        end
+        timezone.add_component daylight
+        timezone.add_component standard
       end
       timezone
     end
