@@ -21,8 +21,6 @@ jobs:
     env:
       BUNDLE_IGNORE_CONFIG: 'true'
       BUNDLE_PLUGINS: 'false'
-      BUNDLE_USER_HOME: ${{ runner.temp }}/icalendar-bundle-user
-      BUNDLE_APP_CONFIG: ${{ runner.temp }}/icalendar-bundle-config
     steps:
       - name: Read the immutable upstream source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -34,6 +32,9 @@ jobs:
           submodules: false
           lfs: false
       - name: Set up pinned official Ruby and Bundler only
+        env:
+          BUNDLE_USER_HOME: ${{ runner.temp }}/icalendar-bundle-user
+          BUNDLE_APP_CONFIG: ${{ runner.temp }}/icalendar-bundle-config
         uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f
         with:
           ruby-version: '3.3.12'
@@ -42,6 +43,9 @@ jobs:
           rubygems: default
           working-directory: source
       - name: Resolve metadata without installing repository dependencies
+        env:
+          BUNDLE_USER_HOME: ${{ runner.temp }}/icalendar-bundle-user
+          BUNDLE_APP_CONFIG: ${{ runner.temp }}/icalendar-bundle-config
         working-directory: source
         shell: bash
         run: |
