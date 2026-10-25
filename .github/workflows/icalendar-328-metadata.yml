@@ -1,0 +1,68 @@
+name: iCalendar metadata-only validation lock
+
+on:
+  push:
+    branches:
+      - validate-icalendar-328-metadata-20261025
+    paths:
+      - .github/workflows/icalendar-328-metadata.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: icalendar-328-metadata-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve-metadata:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      BUNDLE_IGNORE_CONFIG: 'true'
+      BUNDLE_PLUGINS: 'false'
+      BUNDLE_USER_HOME: ${{ runner.temp }}/icalendar-bundle-user
+      BUNDLE_APP_CONFIG: ${{ runner.temp }}/icalendar-bundle-config
+    steps:
+      - name: Read the immutable upstream source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: icalendar/icalendar
+          ref: 41d388974757e871da735d8d36a1b4ab0c481b9d
+          path: source
+          persist-credentials: false
+          submodules: false
+          lfs: false
+      - name: Set up pinned official Ruby and Bundler only
+        uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f
+        with:
+          ruby-version: '3.3.12'
+          bundler: '2.6.9'
+          bundler-cache: false
+          rubygems: default
+          working-directory: source
+      - name: Resolve metadata without installing repository dependencies
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 41d388974757e871da735d8d36a1b4ab0c481b9d
+          ruby --version
+          bundle _2.6.9_ --version
+          printf 'GitHub hosted image version: %s\n' "$ImageVersion"
+          cat > Gemfile.ci <<'GEMFILE'
+          source 'https://rubygems.org'
+          gemspec
+          gem 'tzinfo', '= 2.0.6'
+          gem 'tzinfo-data', '= 1.2026.5'
+          gem 'ice_cube', '= 0.17.0'
+          gem 'rspec-core', '= 3.13.0'
+          GEMFILE
+          bundle _2.6.9_ lock --gemfile Gemfile.ci --add-platform ruby x86_64-linux --add-checksums
+          test -s Gemfile.ci.lock
+          sha256sum Gemfile.ci Gemfile.ci.lock
+          printf '\n----- BEGIN RESOLVED VALIDATION GEMFILE -----\n'
+          cat Gemfile.ci
+          printf '\n----- BEGIN RESOLVED VALIDATION LOCK -----\n'
+          cat Gemfile.ci.lock
+          printf '\n----- END RESOLVED VALIDATION LOCK -----\n'
