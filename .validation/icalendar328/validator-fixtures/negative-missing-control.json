@@ -1,0 +1,80 @@
+{
+  "version": "3.13.0",
+  "summary": {
+    "example_count": 10,
+    "failure_count": 6,
+    "pending_count": 0,
+    "errors_outside_of_examples_count": 0
+  },
+  "examples": [
+    {
+      "id": "./spec/tzinfo_future_recurrence_spec.rb[1:1]",
+      "description": "preserves Santiago month 4 boundaries generated on 2026-10-07T00:00:00+00:00",
+      "status": "failed",
+      "exception": {
+        "class": "RSpec::Expectations::ExpectationNotMetError",
+        "message": "SYNTHETIC validator fixture, not test evidence"
+      }
+    },
+    {
+      "id": "./spec/tzinfo_future_recurrence_spec.rb[1:2]",
+      "description": "preserves Santiago month 9 boundaries generated on 2026-10-07T00:00:00+00:00",
+      "status": "failed",
+      "exception": {
+        "class": "RSpec::Expectations::ExpectationNotMetError",
+        "message": "SYNTHETIC validator fixture, not test evidence"
+      }
+    },
+    {
+      "id": "./spec/tzinfo_future_recurrence_spec.rb[1:3]",
+      "description": "preserves Santiago month 4 boundaries generated on 2030-06-01T00:00:00+00:00",
+      "status": "failed",
+      "exception": {
+        "class": "RSpec::Expectations::ExpectationNotMetError",
+        "message": "SYNTHETIC validator fixture, not test evidence"
+      }
+    },
+    {
+      "id": "./spec/tzinfo_future_recurrence_spec.rb[1:4]",
+      "description": "preserves Santiago month 9 boundaries generated on 2030-06-01T00:00:00+00:00",
+      "status": "failed",
+      "exception": {
+        "class": "RSpec::Expectations::ExpectationNotMetError",
+        "message": "SYNTHETIC validator fixture, not test evidence"
+      }
+    },
+    {
+      "id": "./spec/tzinfo_future_recurrence_spec.rb[1:5]",
+      "description": "uses the weekday/monthday intersection in 2029-4",
+      "status": "failed",
+      "exception": {
+        "class": "RSpec::Expectations::ExpectationNotMetError",
+        "message": "SYNTHETIC validator fixture, not test evidence"
+      }
+    },
+    {
+      "id": "./spec/tzinfo_future_recurrence_spec.rb[1:6]",
+      "description": "uses the weekday/monthday intersection in 2030-9",
+      "status": "failed",
+      "exception": {
+        "class": "RSpec::Expectations::ExpectationNotMetError",
+        "message": "SYNTHETIC validator fixture, not test evidence"
+      }
+    },
+    {
+      "id": "./spec/tzinfo_future_recurrence_spec.rb[1:7]",
+      "description": "retains onset and adjacent-day behavior for Europe/Copenhagen",
+      "status": "passed"
+    },
+    {
+      "id": "./spec/tzinfo_future_recurrence_spec.rb[1:8]",
+      "description": "retains onset and adjacent-day behavior for America/Los_Angeles",
+      "status": "passed"
+    },
+    {
+      "id": "./spec/tzinfo_future_recurrence_spec.rb[1:9]",
+      "description": "retains onset and adjacent-day behavior for Australia/Lord_Howe",
+      "status": "passed"
+    }
+  ]
+}

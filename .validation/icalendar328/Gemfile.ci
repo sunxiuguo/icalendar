@@ -1,0 +1,6 @@
+source 'https://rubygems.org'
+gemspec
+gem 'tzinfo', '= 2.0.6'
+gem 'tzinfo-data', '= 1.2026.5'
+gem 'ice_cube', '= 0.17.0'
+gem 'rspec-core', '= 3.13.0'

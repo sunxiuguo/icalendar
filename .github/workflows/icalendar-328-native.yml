@@ -1,0 +1,222 @@
+name: iCalendar bounded native red-green validation
+
+on:
+  push:
+    branches:
+      - validate-icalendar-328-native-20261025
+
+permissions:
+  contents: read
+
+concurrency:
+  group: icalendar-328-native-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ['3.3.12', '3.4.12', '4.0.9']
+    env:
+      BUNDLE_IGNORE_CONFIG: 'true'
+      BUNDLE_PLUGINS: 'false'
+      BUNDLE_FROZEN: 'true'
+      BUNDLE_DISABLE_CHECKSUM_VALIDATION: 'false'
+      BUNDLE_FORCE_RUBY_PLATFORM: 'true'
+      GEMFILE_SHA: 0195712d5bb55ab3c4a930c6772ef9fcfd1b77e067b6d445afa7acd41488a5d0
+      LOCK_SHA: 7093f4ca84e04887c8a2a8284fa7a4c4628104b47e7a6cf0cfdd91122783fd22
+      BASE_TZINFO_SHA: cadfa935203d5841ee982222e0718c3bd01300dcbcf48451d339a40afa2aa3d1
+      CANDIDATE_TZINFO_SHA: ac6f1d033d1b2dec765a7e3da1b2241dabd63d0bd29d1bea1b0cb59ed163bc4f
+      LIBRARY_SHA: adae65c93c94a2e4f1cf13ad79fe15d227589dcaefc9abd5d47d7d2bef4ee1d0
+    steps:
+      - name: Checkout the exact candidate commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: false
+          lfs: false
+      - name: Checkout the independent exact original baseline
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: icalendar/icalendar
+          ref: 41d388974757e871da735d8d36a1b4ab0c481b9d
+          path: baseline
+          persist-credentials: false
+          submodules: false
+          lfs: false
+      - name: Verify allowlisted source and immutable harness before execution
+        working-directory: candidate
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test "$(git -C ../baseline rev-parse HEAD)" = 41d388974757e871da735d8d36a1b4ab0c481b9d
+          git merge-base --is-ancestor 41d388974757e871da735d8d36a1b4ab0c481b9d HEAD
+          printf '%s  %s\n' 16fcd776b5930368e8bbfe4d12582f8bf425426c5a8698af9cb5f137e9128c8a .validation/icalendar328/SHA256SUMS | sha256sum --check --strict
+          sha256sum --check --strict .validation/icalendar328/SHA256SUMS
+          git diff --name-only 41d388974757e871da735d8d36a1b4ab0c481b9d HEAD | LC_ALL=C sort > "$RUNNER_TEMP/icalendar328-changed-paths"
+          diff -u .validation/icalendar328/ALLOWLIST "$RUNNER_TEMP/icalendar328-changed-paths"
+          for root in "$GITHUB_WORKSPACE/baseline" "$GITHUB_WORKSPACE/candidate"; do
+            cp .validation/icalendar328/Gemfile.ci "$root/Gemfile.ci"
+            cp .validation/icalendar328/Gemfile.ci.lock "$root/Gemfile.ci.lock"
+          done
+      - name: Set up exact Ruby and Bundler tooling
+        uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f
+        env:
+          BUNDLE_USER_HOME: ${{ runner.temp }}/icalendar-native-tooling-user
+          BUNDLE_APP_CONFIG: ${{ runner.temp }}/icalendar-native-tooling-config
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler: '2.6.9'
+          bundler-cache: false
+          rubygems: default
+          working-directory: candidate
+      - name: Check native syntax and synthetic validator contracts
+        env:
+          EXPECTED_RUBY: ${{ matrix.ruby }}
+        working-directory: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby --version
+          ruby -e 'abort "Wrong engine/version" unless RUBY_ENGINE == "ruby" && RUBY_VERSION == ENV.fetch("EXPECTED_RUBY"); abort "Wrong platform" unless RUBY_PLATFORM.start_with?("x86_64-linux") && Gem::Platform.local.cpu == "x86_64" && Gem::Platform.local.os == "linux"; puts "Verified MRI #{RUBY_VERSION} on #{RUBY_PLATFORM}"'
+          bundle _2.6.9_ --version
+          printf 'GitHub hosted image version: %s\n' "$ImageVersion"
+          for file in lib/icalendar/tzinfo.rb lib/icalendar/transition_rule_sample.rb spec/tzinfo_future_recurrence_spec.rb spec/transition_rule_sample_spec.rb .validation/icalendar328/verify_native_source.rb .validation/icalendar328/verify_expected_red.rb; do
+            ruby -c "$file"
+          done
+          ruby .validation/icalendar328/test_red_validator.rb
+      - name: Install only reviewed frozen baseline dependencies
+        working-directory: baseline
+        shell: bash
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/baseline/Gemfile.ci
+          BUNDLE_PATH: ${{ runner.temp }}/icalendar-native-baseline-gems-${{ matrix.ruby }}
+          BUNDLE_USER_HOME: ${{ runner.temp }}/icalendar-native-baseline-user
+          BUNDLE_APP_CONFIG: ${{ runner.temp }}/icalendar-native-baseline-config
+        run: |
+          set -euo pipefail
+          overlay_required=0
+          verify_reviewed_worktrees() {
+            (
+              cd "$GITHUB_WORKSPACE/candidate"
+              printf '%s  %s\n' 16fcd776b5930368e8bbfe4d12582f8bf425426c5a8698af9cb5f137e9128c8a .validation/icalendar328/SHA256SUMS | sha256sum --check --strict || exit 1
+              sha256sum --check --strict .validation/icalendar328/SHA256SUMS || exit 1
+              git diff --exit-code HEAD -- lib spec .validation .github/workflows
+            ) || return 1
+            git -C "$GITHUB_WORKSPACE/baseline" diff --exit-code 41d388974757e871da735d8d36a1b4ab0c481b9d -- lib spec || return 1
+            if [ "$overlay_required" -eq 1 ]; then
+              (cd "$GITHUB_WORKSPACE/baseline" && printf '%s  %s\n' 17b776a2675f8fcec4b759ffce21693f376b1350466934b6f646e904c6810540 spec/tzinfo_future_recurrence_spec.rb | sha256sum --check --strict) || return 1
+            else
+              test ! -e "$GITHUB_WORKSPACE/baseline/spec/tzinfo_future_recurrence_spec.rb" || return 1
+            fi
+          }
+          trap 'status=$?; trap - EXIT; verify_reviewed_worktrees || exit 1; exit "$status"' EXIT
+          verify_reviewed_worktrees
+          printf '%s  %s\n' "$GEMFILE_SHA" Gemfile.ci "$LOCK_SHA" Gemfile.ci.lock | sha256sum --check --strict
+          unset RUBYOPT RUBYLIB CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS DLDFLAGS ARCHFLAGS debug BIGDECIMAL_USE_VP_TEST_METHODS
+          bundle _2.6.9_ install --jobs 2 --retry 0
+          printf '%s  %s\n' "$GEMFILE_SHA" Gemfile.ci "$LOCK_SHA" Gemfile.ci.lock | sha256sum --check --strict
+      - name: Original baseline full suite then intended consumer regression red
+        working-directory: baseline
+        shell: bash
+        env:
+          BUNDLE_PATH: ${{ runner.temp }}/icalendar-native-baseline-gems-${{ matrix.ruby }}
+          BUNDLE_USER_HOME: ${{ runner.temp }}/icalendar-native-baseline-user
+          BUNDLE_APP_CONFIG: ${{ runner.temp }}/icalendar-native-baseline-config
+        run: |
+          set -euo pipefail
+          overlay_required=0
+          verify_reviewed_worktrees() {
+            (
+              cd "$GITHUB_WORKSPACE/candidate"
+              printf '%s  %s\n' 16fcd776b5930368e8bbfe4d12582f8bf425426c5a8698af9cb5f137e9128c8a .validation/icalendar328/SHA256SUMS | sha256sum --check --strict || exit 1
+              sha256sum --check --strict .validation/icalendar328/SHA256SUMS || exit 1
+              git diff --exit-code HEAD -- lib spec .validation .github/workflows
+            ) || return 1
+            git -C "$GITHUB_WORKSPACE/baseline" diff --exit-code 41d388974757e871da735d8d36a1b4ab0c481b9d -- lib spec || return 1
+            if [ "$overlay_required" -eq 1 ]; then
+              (cd "$GITHUB_WORKSPACE/baseline" && printf '%s  %s\n' 17b776a2675f8fcec4b759ffce21693f376b1350466934b6f646e904c6810540 spec/tzinfo_future_recurrence_spec.rb | sha256sum --check --strict) || return 1
+            else
+              test ! -e "$GITHUB_WORKSPACE/baseline/spec/tzinfo_future_recurrence_spec.rb" || return 1
+            fi
+          }
+          trap 'status=$?; trap - EXIT; verify_reviewed_worktrees || exit 1; exit "$status"' EXIT
+          verify_reviewed_worktrees
+          harness="$GITHUB_WORKSPACE/candidate/.validation/icalendar328"
+          bash "$harness/run_native.sh" baseline-full "$PWD" "$GEMFILE_SHA" "$LOCK_SHA" "$BASE_TZINFO_SHA" "$LIBRARY_SHA"
+          verify_reviewed_worktrees
+          test ! -e spec/tzinfo_future_recurrence_spec.rb
+          cp "$GITHUB_WORKSPACE/candidate/spec/tzinfo_future_recurrence_spec.rb" spec/tzinfo_future_recurrence_spec.rb
+          overlay_required=1
+          printf '%s  %s\n' 17b776a2675f8fcec4b759ffce21693f376b1350466934b6f646e904c6810540 spec/tzinfo_future_recurrence_spec.rb | sha256sum --check --strict
+          bash "$harness/run_expected_red.sh" "$PWD" "$GEMFILE_SHA" "$LOCK_SHA" "$BASE_TZINFO_SHA" "$LIBRARY_SHA"
+      - name: Install only reviewed frozen candidate dependencies
+        working-directory: candidate
+        shell: bash
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/candidate/Gemfile.ci
+          BUNDLE_PATH: ${{ runner.temp }}/icalendar-native-candidate-gems-${{ matrix.ruby }}
+          BUNDLE_USER_HOME: ${{ runner.temp }}/icalendar-native-candidate-user
+          BUNDLE_APP_CONFIG: ${{ runner.temp }}/icalendar-native-candidate-config
+        run: |
+          set -euo pipefail
+          overlay_required=1
+          verify_reviewed_worktrees() {
+            (
+              cd "$GITHUB_WORKSPACE/candidate"
+              printf '%s  %s\n' 16fcd776b5930368e8bbfe4d12582f8bf425426c5a8698af9cb5f137e9128c8a .validation/icalendar328/SHA256SUMS | sha256sum --check --strict || exit 1
+              sha256sum --check --strict .validation/icalendar328/SHA256SUMS || exit 1
+              git diff --exit-code HEAD -- lib spec .validation .github/workflows
+            ) || return 1
+            git -C "$GITHUB_WORKSPACE/baseline" diff --exit-code 41d388974757e871da735d8d36a1b4ab0c481b9d -- lib spec || return 1
+            if [ "$overlay_required" -eq 1 ]; then
+              (cd "$GITHUB_WORKSPACE/baseline" && printf '%s  %s\n' 17b776a2675f8fcec4b759ffce21693f376b1350466934b6f646e904c6810540 spec/tzinfo_future_recurrence_spec.rb | sha256sum --check --strict) || return 1
+            else
+              test ! -e "$GITHUB_WORKSPACE/baseline/spec/tzinfo_future_recurrence_spec.rb" || return 1
+            fi
+          }
+          trap 'status=$?; trap - EXIT; verify_reviewed_worktrees || exit 1; exit "$status"' EXIT
+          verify_reviewed_worktrees
+          printf '%s  %s\n' "$GEMFILE_SHA" Gemfile.ci "$LOCK_SHA" Gemfile.ci.lock | sha256sum --check --strict
+          unset RUBYOPT RUBYLIB CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS DLDFLAGS ARCHFLAGS debug BIGDECIMAL_USE_VP_TEST_METHODS
+          bundle _2.6.9_ install --jobs 2 --retry 0
+          printf '%s  %s\n' "$GEMFILE_SHA" Gemfile.ci "$LOCK_SHA" Gemfile.ci.lock | sha256sum --check --strict
+      - name: Candidate focused and complete native suites
+        working-directory: candidate
+        shell: bash
+        env:
+          BUNDLE_PATH: ${{ runner.temp }}/icalendar-native-candidate-gems-${{ matrix.ruby }}
+          BUNDLE_USER_HOME: ${{ runner.temp }}/icalendar-native-candidate-user
+          BUNDLE_APP_CONFIG: ${{ runner.temp }}/icalendar-native-candidate-config
+        run: |
+          set -euo pipefail
+          overlay_required=1
+          verify_reviewed_worktrees() {
+            (
+              cd "$GITHUB_WORKSPACE/candidate"
+              printf '%s  %s\n' 16fcd776b5930368e8bbfe4d12582f8bf425426c5a8698af9cb5f137e9128c8a .validation/icalendar328/SHA256SUMS | sha256sum --check --strict || exit 1
+              sha256sum --check --strict .validation/icalendar328/SHA256SUMS || exit 1
+              git diff --exit-code HEAD -- lib spec .validation .github/workflows
+            ) || return 1
+            git -C "$GITHUB_WORKSPACE/baseline" diff --exit-code 41d388974757e871da735d8d36a1b4ab0c481b9d -- lib spec || return 1
+            if [ "$overlay_required" -eq 1 ]; then
+              (cd "$GITHUB_WORKSPACE/baseline" && printf '%s  %s\n' 17b776a2675f8fcec4b759ffce21693f376b1350466934b6f646e904c6810540 spec/tzinfo_future_recurrence_spec.rb | sha256sum --check --strict) || return 1
+            else
+              test ! -e "$GITHUB_WORKSPACE/baseline/spec/tzinfo_future_recurrence_spec.rb" || return 1
+            fi
+          }
+          trap 'status=$?; trap - EXIT; verify_reviewed_worktrees || exit 1; exit "$status"' EXIT
+          verify_reviewed_worktrees
+          harness="$PWD/.validation/icalendar328"
+          bash "$harness/run_native.sh" candidate-focused "$PWD" "$GEMFILE_SHA" "$LOCK_SHA" "$CANDIDATE_TZINFO_SHA" "$LIBRARY_SHA"
+          verify_reviewed_worktrees
+          bash "$harness/run_native.sh" candidate-full "$PWD" "$GEMFILE_SHA" "$LOCK_SHA" "$CANDIDATE_TZINFO_SHA" "$LIBRARY_SHA"
